@@ -1,0 +1,130 @@
+name: CI/CD — RAG LLMOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/rag-llmops
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1 – Lint & Test
+  # ──────────────────────────────────────────────────────────────────────────
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          # Install a lightweight subset for testing (no torch/faiss-gpu)
+          pip install fastapi uvicorn httpx pytest pytest-asyncio python-dotenv \
+                      pydantic pydantic-settings langchain langchain-community \
+                      langchain-openai openai boto3 faiss-cpu sentence-transformers \
+                      pypdf docx2txt
+
+      - name: Run tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: pytest tests/ -v --tb=short
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 2 – Build & Push Docker Image
+  # ──────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 3 – Deploy to AWS EC2
+  # ──────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "=== Pulling latest image ==="
+            docker pull ghcr.io/${{ github.repository_owner }}/rag-llmops:latest
+
+            echo "=== Stopping old container (if any) ==="
+            docker stop rag_api 2>/dev/null || true
+            docker rm   rag_api 2>/dev/null || true
+
+            echo "=== Starting new container ==="
+            docker run -d \
+              --name rag_api \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              -v rag_vectorstore:/app/vectorstore \
+              -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}" \
+              ghcr.io/${{ github.repository_owner }}/rag-llmops:latest
+
+            echo "=== Health check ==="
+            sleep 10
+            curl -f http://localhost:8000/health || (docker logs rag_api && exit 1)
+
+            echo "=== Deployment successful! ==="

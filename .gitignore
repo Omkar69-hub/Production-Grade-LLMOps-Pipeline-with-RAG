@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtualenvs
+venv/
+.venv/
+env/
+
+# Secrets & config
+.env
+*.key
+
+# FAISS index (rebuilt on first run)
+vectorstore/
+
+# Temp uploads
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# pytest / coverage
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Docker
+*.tar

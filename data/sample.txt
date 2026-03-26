@@ -1,0 +1,32 @@
+This is a sample document for testing the RAG pipeline.
+
+== Introduction ==
+Retrieval-Augmented Generation (RAG) is a technique that combines large language models with
+information retrieval systems. Instead of relying solely on the LLM's parametric knowledge,
+RAG dynamically fetches relevant documents at inference time and conditions the LLM on them.
+
+== Key Benefits ==
+1. Factual accuracy: answers are grounded in real source documents.
+2. Up-to-date information: the knowledge base can be updated independently of the model.
+3. Reduced hallucination: the model is less likely to fabricate information.
+4. Transparency: sources can be cited alongside the answer.
+
+== How It Works ==
+Step 1 – Indexing: Documents are split into chunks and converted to dense vector embeddings.
+Step 2 – Storage: The embeddings are stored in a vector database (e.g. FAISS or Chroma).
+Step 3 – Retrieval: At query time the query is embedded and the top-k similar chunks are retrieved.
+Step 4 – Generation: The retrieved chunks are concatenated with the query and fed to the LLM.
+
+== Use Cases ==
+- Enterprise knowledge bases and internal Q&A systems
+- Customer support automation
+- Legal and compliance document analysis
+- Medical and scientific literature review
+
+== This System ==
+This production-grade RAG pipeline is built with:
+- LangChain for orchestration
+- Sentence Transformers (all-MiniLM-L6-v2) for embeddings
+- FAISS for vector search
+- FastAPI for the REST API
+- Docker + GitHub Actions + AWS EC2 for deployment
