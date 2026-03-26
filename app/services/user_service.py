@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.db_models import User
-from app.utils.exceptions import AuthenticationError, AuthorizationError
+from app.utils.exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
@@ -131,13 +131,15 @@ async def authenticate(db: AsyncSession, username: str, password: str) -> User:
 
     # Use a dummy verify call even on missing user to avoid timing attacks
     dummy = hash_password("dummy-to-prevent-timing-leak")
-    password_ok = verify_password(password, user.hashed_password if user else dummy)
+    password_ok = verify_password(
+        password, user.hashed_password if user else dummy)
 
     if not user or not password_ok:
         raise AuthenticationError("Invalid username or password.")
 
     if not user.is_active:
-        raise AuthenticationError("Account is disabled. Contact an administrator.")
+        raise AuthenticationError(
+            "Account is disabled. Contact an administrator.")
 
     # Update last_login
     user.last_login = datetime.now(timezone.utc)

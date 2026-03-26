@@ -12,7 +12,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -67,7 +67,8 @@ async def lifespan(app: FastAPI):
     # ── RAG pipeline: load persisted FAISS index if present ───────────────────
     pipeline = get_rag_pipeline()
     pipeline.load_existing_vectorstore()
-    logger.info("RAG pipeline ready | vectorstore_loaded=%s", pipeline.is_ready())
+    logger.info("RAG pipeline ready | vectorstore_loaded=%s",
+                pipeline.is_ready())
 
     yield
 
@@ -100,8 +101,10 @@ def create_app() -> FastAPI:
         openapi_tags=[
             {"name": "System",         "description": "Health and monitoring"},
             {"name": "Authentication", "description": "JWT token management"},
-            {"name": "Users",          "description": "User management (admin-only for most ops)"},
-            {"name": "QA",             "description": "Retrieval-Augmented Generation queries"},
+            {"name": "Users",
+                "description": "User management (admin-only for most ops)"},
+            {"name": "QA",
+                "description": "Retrieval-Augmented Generation queries"},
             {"name": "Documents",      "description": "Document ingestion and management"},
         ],
         lifespan=lifespan,
@@ -147,10 +150,12 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     prefix = cfg.api_prefix
     app.include_router(health.router)                        # GET  /health
-    app.include_router(auth.router,      prefix=prefix)      # POST /api/v1/auth/token
+    # POST /api/v1/auth/token
+    app.include_router(auth.router,      prefix=prefix)
     app.include_router(users.router,     prefix=prefix)      # /api/v1/users/**
     app.include_router(ask.router,       prefix=prefix)      # /api/v1/ask/**
-    app.include_router(documents.router, prefix=prefix)      # /api/v1/documents/**
+    # /api/v1/documents/**
+    app.include_router(documents.router, prefix=prefix)
 
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)

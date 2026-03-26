@@ -72,7 +72,8 @@ def upload_to_s3(local_path: str, filename: str) -> str:
     try:
         key = f"documents/{filename}"
         _get_s3().upload_file(local_path, bucket, key)
-        logging.getLogger(__name__).info("Uploaded '%s' → s3://%s/%s", filename, bucket, key)
+        logging.getLogger(__name__).info(
+            "Uploaded '%s' → s3://%s/%s", filename, bucket, key)
         return key
     except (BotoCoreError, ClientError) as exc:
         logging.getLogger(__name__).error("S3 upload failed: %s", exc)
@@ -89,7 +90,8 @@ def download_from_s3(key: str, dest_path: str) -> bool:
         return False
     try:
         _get_s3().download_file(bucket, key, dest_path)
-        logging.getLogger(__name__).info("Downloaded s3://%s/%s → %s", bucket, key, dest_path)
+        logging.getLogger(__name__).info(
+            "Downloaded s3://%s/%s → %s", bucket, key, dest_path)
         return True
     except (BotoCoreError, ClientError) as exc:
         logging.getLogger(__name__).error("S3 download failed: %s", exc)

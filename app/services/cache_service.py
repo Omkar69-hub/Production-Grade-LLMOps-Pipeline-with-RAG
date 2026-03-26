@@ -5,7 +5,6 @@ app/services/cache_service.py — Redis-backed response cache with graceful fall
 import hashlib
 import json
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,8 @@ def _get_redis():
                 socket_connect_timeout=2,
             )
         except Exception as exc:
-            logger.warning("Redis connection failed — caching disabled: %s", exc)
+            logger.warning(
+                "Redis connection failed — caching disabled: %s", exc)
             return None
     return _redis_client
 
@@ -77,7 +77,8 @@ async def set_cached(
         cfg = get_settings()
         key = _cache_key(query, top_k, metadata_filter)
         await client.setex(key, ttl or cfg.cache_ttl_seconds, json.dumps(response))
-        logger.debug("Cache SET for key %s (ttl=%ds)", key[:16], ttl or cfg.cache_ttl_seconds)
+        logger.debug("Cache SET for key %s (ttl=%ds)",
+                     key[:16], ttl or cfg.cache_ttl_seconds)
     except Exception as exc:
         logger.warning("Cache SET error: %s", exc)
 

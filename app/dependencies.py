@@ -10,7 +10,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.services.auth_service import TokenClaims, decode_access_token
 from app.services.db_service import get_db
-from app.services.rag_service import RAGPipeline, get_rag_pipeline
 from app.utils.exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,8 @@ _bearer = HTTPBearer(auto_error=False)
 # ── Auth — returns full TokenClaims (username + role) ─────────────────────────
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials |
+                           None, Depends(_bearer)] = None,
 ) -> TokenClaims:
     """
     Dependency: validate Bearer JWT and return decoded TokenClaims.

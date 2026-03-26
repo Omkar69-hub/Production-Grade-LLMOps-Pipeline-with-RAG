@@ -78,7 +78,8 @@ async def upload_document(
 
     # Background indexing
     background_tasks.add_task(_index_in_background, tmp_path, file.filename)
-    logger.info("Accepted '%s' for indexing (size=%d bytes).", file.filename, file_size)
+    logger.info("Accepted '%s' for indexing (size=%d bytes).",
+                file.filename, file_size)
 
     return UploadResponse(
         message=f"'{file.filename}' accepted for indexing.",

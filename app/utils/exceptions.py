@@ -79,8 +79,10 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     import logging
     logger = logging.getLogger(__name__)
     request_id = getattr(request.state, "request_id", None)
-    logger.exception("Unhandled exception [request_id=%s]", request_id, exc_info=exc)
+    logger.exception(
+        "Unhandled exception [request_id=%s]", request_id, exc_info=exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=_error_body("INTERNAL_ERROR", "An internal server error occurred.", request_id),
+        content=_error_body(
+            "INTERNAL_ERROR", "An internal server error occurred.", request_id),
     )

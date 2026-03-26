@@ -24,7 +24,6 @@ from app.models.schemas import (
 )
 from app.services import user_service
 from app.services.auth_service import TokenClaims, decode_access_token
-from app.utils.exceptions import AuthorizationError
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,8 @@ _bearer = HTTPBearer(auto_error=False)
 # ── Shared dependency: decode JWT and return claims ────────────────────────────
 
 async def get_claims(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials |
+                           None, Depends(_bearer)] = None,
 ) -> TokenClaims:
     if not credentials:
         raise HTTPException(
@@ -85,7 +85,8 @@ async def create_user(
             role=body.role,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     return UserProfileResponse.model_validate(user)
 
@@ -156,7 +157,8 @@ async def change_my_password(
         user = await user_service.get_user_by_username(db, claims.sub)
         await user_service.change_password(db, user.id, body.new_password)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     return {"message": "Password updated successfully."}
 
@@ -177,5 +179,6 @@ async def deactivate_user(
     try:
         user = await user_service.deactivate_user(db, user_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return {"message": f"User '{user.username}' deactivated.", "id": user.id}

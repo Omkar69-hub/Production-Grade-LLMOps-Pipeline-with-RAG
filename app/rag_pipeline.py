@@ -84,7 +84,8 @@ class RAGPipeline:
                     allow_dangerous_deserialization=True,
                 )
                 self._build_chain()
-                logger.info("Loaded existing vectorstore from '%s'.", VECTORSTORE_PATH)
+                logger.info(
+                    "Loaded existing vectorstore from '%s'.", VECTORSTORE_PATH)
             except Exception as exc:
                 logger.warning("Could not load existing vectorstore: %s", exc)
 
@@ -93,7 +94,8 @@ class RAGPipeline:
         docs = self._load_file(file_path)
         chunks = self._splitter.split_documents(docs)
         logger.info(
-            "Ingesting '%s': %d raw docs → %d chunks.", filename, len(docs), len(chunks)
+            "Ingesting '%s': %d raw docs → %d chunks.", filename, len(
+                docs), len(chunks)
         )
 
         if self._vectorstore is None:
@@ -122,10 +124,12 @@ class RAGPipeline:
         sources = [doc.page_content[:300] for doc in source_docs]
 
         if self._chain is not None:
-            answer = self._chain.invoke({"question": question, "context": _format_docs(source_docs)})
+            answer = self._chain.invoke(
+                {"question": question, "context": _format_docs(source_docs)})
         else:
             # Fallback: return the retrieved context directly
-            answer = "\n\n---\n\n".join(sources) if sources else "No relevant documents found."
+            answer = "\n\n---\n\n".join(
+                sources) if sources else "No relevant documents found."
 
         return answer, sources
 
@@ -153,7 +157,8 @@ class RAGPipeline:
             )
             logger.info("LCEL RAG chain built with model '%s'.", LLM_MODEL)
         except Exception as exc:
-            logger.warning("Could not build LLM chain: %s — falling back to retrieval-only.", exc)
+            logger.warning(
+                "Could not build LLM chain: %s — falling back to retrieval-only.", exc)
             self._chain = None
 
     @staticmethod

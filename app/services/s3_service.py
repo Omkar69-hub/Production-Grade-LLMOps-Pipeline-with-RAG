@@ -62,18 +62,22 @@ async def upload_file_to_s3(local_path: str, filename: str) -> str:
     """Upload a file to S3 asynchronously. Returns S3 key or ''."""
     cfg = get_settings()
     if not cfg.s3_enabled:
-        logger.warning("S3 not configured — skipping upload of '%s'.", filename)
+        logger.warning(
+            "S3 not configured — skipping upload of '%s'.", filename)
         return ""
     key = f"{S3_PREFIX}{filename}"
     loop = asyncio.get_event_loop()
     try:
         await loop.run_in_executor(
-            _executor, partial(_sync_upload, local_path, cfg.s3_bucket_name, key)
+            _executor, partial(_sync_upload, local_path,
+                               cfg.s3_bucket_name, key)
         )
-        logger.info("Uploaded '%s' → s3://%s/%s", filename, cfg.s3_bucket_name, key)
+        logger.info("Uploaded '%s' → s3://%s/%s",
+                    filename, cfg.s3_bucket_name, key)
         return key
     except (BotoCoreError, ClientError) as exc:
-        raise S3OperationError(f"S3 upload failed for '{filename}': {exc}") from exc
+        raise S3OperationError(
+            f"S3 upload failed for '{filename}': {exc}") from exc
 
 
 async def download_file_from_s3(key: str, dest_path: str) -> bool:
@@ -84,12 +88,15 @@ async def download_file_from_s3(key: str, dest_path: str) -> bool:
     loop = asyncio.get_event_loop()
     try:
         await loop.run_in_executor(
-            _executor, partial(_sync_download, cfg.s3_bucket_name, key, dest_path)
+            _executor, partial(
+                _sync_download, cfg.s3_bucket_name, key, dest_path)
         )
-        logger.info("Downloaded s3://%s/%s → %s", cfg.s3_bucket_name, key, dest_path)
+        logger.info("Downloaded s3://%s/%s → %s",
+                    cfg.s3_bucket_name, key, dest_path)
         return True
     except (BotoCoreError, ClientError) as exc:
-        raise S3OperationError(f"S3 download failed for key '{key}': {exc}") from exc
+        raise S3OperationError(
+            f"S3 download failed for key '{key}': {exc}") from exc
 
 
 async def list_files(page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:

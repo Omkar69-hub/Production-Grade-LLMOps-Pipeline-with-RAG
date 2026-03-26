@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -35,7 +35,8 @@ class UserCreateRequest(BaseModel):
     @classmethod
     def username_alphanumeric(cls, v: str) -> str:
         if not v.replace("_", "").replace("-", "").isalnum():
-            raise ValueError("Username may only contain letters, numbers, hyphens, and underscores.")
+            raise ValueError(
+                "Username may only contain letters, numbers, hyphens, and underscores.")
         return v.lower()
 
 
@@ -67,8 +68,10 @@ class UserListResponse(BaseModel):
 # ── QA / Ask ──────────────────────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=2000, examples=["What is RAG?"])
-    top_k: int = Field(4, ge=1, le=20, description="Number of chunks to retrieve")
+    query: str = Field(..., min_length=1, max_length=2000,
+                       examples=["What is RAG?"])
+    top_k: int = Field(
+        4, ge=1, le=20, description="Number of chunks to retrieve")
     metadata_filter: dict[str, Any] | None = Field(
         None, description="Optional metadata key-value filters"
     )

@@ -63,7 +63,8 @@ def upload_file_to_s3(local_path: str, filename: str) -> str:
     """
     cfg = get_settings()
     if not cfg.s3_enabled:
-        logger.warning("S3 not configured — skipping upload of '%s'.", filename)
+        logger.warning(
+            "S3 not configured — skipping upload of '%s'.", filename)
         return ""
 
     key = f"{S3_PREFIX}{filename}"

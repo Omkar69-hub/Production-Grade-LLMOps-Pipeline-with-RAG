@@ -4,7 +4,6 @@ app/utils/file_utils.py — Async-safe file helpers.
 
 import os
 import tempfile
-import shutil
 
 import aiofiles
 from fastapi import UploadFile
