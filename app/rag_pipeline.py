@@ -1,5 +1,6 @@
 """
 RAG Pipeline — core embedding, indexing & retrieval logic.
+Compatible with LangChain 1.x (LCEL-based, no deprecated chains).
 """
 
 import os
@@ -8,12 +9,12 @@ import logging
 from typing import Optional
 
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
-from langchain_community.llms import OpenAI
-from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,20 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
 DOCS_META_PATH = os.path.join(VECTORSTORE_PATH, "ingested_docs.json")
 
+# Prompt template for RAG chain
+RAG_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", (
+        "You are a helpful assistant. Answer the user's question using ONLY the context "
+        "provided below. If the context does not contain enough information to answer, "
+        "say 'I don't have enough information to answer that based on the uploaded documents.'\n\n"
+        "Context:\n{context}"
+    )),
+    ("human", "{question}"),
+])
+
 
 class RAGPipeline:
-    """Encapsulates the full Retrieve-and-Generate pipeline."""
+    """Encapsulates the full Retrieve-and-Generate pipeline (LangChain 1.x LCEL)."""
 
     def __init__(self):
         self._embeddings = HuggingFaceEmbeddings(
@@ -37,7 +49,7 @@ class RAGPipeline:
             chunk_overlap=int(os.getenv("CHUNK_OVERLAP", 50)),
         )
         self._vectorstore: Optional[FAISS] = None
-        self._qa_chain = None
+        self._chain = None
         self._ingested_docs: list[str] = []
         self._load_docs_meta()
 
@@ -71,7 +83,7 @@ class RAGPipeline:
                     self._embeddings,
                     allow_dangerous_deserialization=True,
                 )
-                self._build_qa_chain()
+                self._build_chain()
                 logger.info("Loaded existing vectorstore from '%s'.", VECTORSTORE_PATH)
             except Exception as exc:
                 logger.warning("Could not load existing vectorstore: %s", exc)
@@ -90,7 +102,7 @@ class RAGPipeline:
             self._vectorstore.add_documents(chunks)
 
         self._vectorstore.save_local(VECTORSTORE_PATH)
-        self._build_qa_chain()
+        self._build_chain()
 
         if filename not in self._ingested_docs:
             self._ingested_docs.append(filename)
@@ -105,36 +117,44 @@ class RAGPipeline:
         retriever = self._vectorstore.as_retriever(
             search_type="similarity", search_kwargs={"k": top_k}
         )
-        result = self._qa_chain({"query": question})
-        answer = result.get("result", "")
-
-        source_docs = result.get("source_documents", [])
+        # Retrieve source docs for the response
+        source_docs = retriever.invoke(question)
         sources = [doc.page_content[:300] for doc in source_docs]
+
+        if self._chain is not None:
+            answer = self._chain.invoke({"question": question, "context": _format_docs(source_docs)})
+        else:
+            # Fallback: return the retrieved context directly
+            answer = "\n\n---\n\n".join(sources) if sources else "No relevant documents found."
+
         return answer, sources
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
-    def _build_qa_chain(self):
-        """(Re-)build the RetrievalQA chain after vectorstore updates."""
-        retriever = self._vectorstore.as_retriever(search_kwargs={"k": 4})
-
-        if OPENAI_API_KEY:
+    def _build_chain(self):
+        """(Re-)build the LCEL RAG chain after vectorstore updates."""
+        if not OPENAI_API_KEY:
+            # No LLM configured — queries will return raw retrieved context
+            logger.info("No OPENAI_API_KEY set — using retrieval-only mode.")
+            self._chain = None
+            return
+        try:
+            from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
-                model_name=LLM_MODEL,
+                model=LLM_MODEL,
                 temperature=0,
-                openai_api_key=OPENAI_API_KEY,
+                api_key=OPENAI_API_KEY,
             )
-        else:
-            # Fallback: use a simple prompt-based retrieval without LLM
-            # (returns top-k chunks only – useful for dev without API key)
-            llm = _FallbackLLM()
-
-        self._qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-        )
+            self._chain = (
+                {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+                | RAG_PROMPT
+                | llm
+                | StrOutputParser()
+            )
+            logger.info("LCEL RAG chain built with model '%s'.", LLM_MODEL)
+        except Exception as exc:
+            logger.warning("Could not build LLM chain: %s — falling back to retrieval-only.", exc)
+            self._chain = None
 
     @staticmethod
     def _load_file(file_path: str):
@@ -149,23 +169,5 @@ class RAGPipeline:
             raise ValueError(f"Unsupported file type: {ext}")
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Fallback "LLM" for when no OpenAI key is configured
-# ──────────────────────────────────────────────────────────────────────────────
-from langchain.llms.base import LLM
-from typing import Any
-
-
-class _FallbackLLM(LLM):
-    """Returns the retrieved context directly (no actual LLM call)."""
-
-    @property
-    def _llm_type(self) -> str:
-        return "fallback"
-
-    def _call(self, prompt: str, stop: Any = None, **kwargs) -> str:
-        # strip preamble and return the embedded context
-        marker = "Context:"
-        if marker in prompt:
-            return prompt.split(marker, 1)[-1].strip()
-        return prompt
+def _format_docs(docs) -> str:
+    return "\n\n".join(doc.page_content for doc in docs)
