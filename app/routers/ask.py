@@ -20,9 +20,8 @@ from app.models.schemas import (
 )
 from app.services import cache_service
 from app.services.db_service import log_query
-from app.services.rag_service import async_query
+from app.services.rag_service import async_query, get_rag_pipeline
 from app.utils.exceptions import VectorStoreNotReadyError
-from app.services.rag_service import get_rag_pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ask", tags=["QA"])
@@ -40,8 +39,8 @@ router = APIRouter(prefix="/ask", tags=["QA"])
         "- Hybrid BM25 + vector retrieval\n"
         "- Cross-encoder re-ranking\n"
         "- Redis response caching\n"
-        "- Optional `metadata_filter` for scoped search\n"
-        "- Optional `stream=true` for Server-Sent Events\n"
+        "- Optional metadata_filter for scoped search\n"
+        "- Optional stream=true for Server-Sent Events\n"
     ),
 )
 async def ask_post(
@@ -76,7 +75,11 @@ async def ask_get(
 ) -> QueryResponse:
     if not get_rag_pipeline().is_ready():
         raise VectorStoreNotReadyError()
-    return await _handle_query(QueryRequest(query=query, top_k=top_k), db)
+
+    return await _handle_query(
+        QueryRequest(query=query, top_k=top_k),
+        db,
+    )
 
 
 # ── GET /ask/history ──────────────────────────────────────────────────────────
@@ -104,12 +107,20 @@ async def query_history(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    items = [QueryHistoryItem.model_validate(row) for row in items_q.scalars()]
+
+    items = [
+        QueryHistoryItem.model_validate(row)
+        for row in items_q.scalars()
+    ]
+
     total_pages = max(1, (total + page_size - 1) // page_size)
 
     return QueryHistoryResponse(
-        items=items, count=len(items), page=page,
-        page_size=page_size, total_pages=total_pages,
+        items=items,
+        count=len(items),
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
     )
 
 
@@ -120,17 +131,26 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
 
     # Cache lookup
     cached = await cache_service.get_cached(
-        request.query, request.top_k, request.metadata_filter
+        request.query,
+        request.top_k,
+        request.metadata_filter,
     )
+
     if cached:
         logger.info("Cache HIT | query=%r", request.query[:50])
         return QueryResponse(**cached, cached=True)
 
     # RAG query
-    answer, sources = await async_query(request.query, request.top_k, request.metadata_filter)
+    answer, sources = await async_query(
+        request.query,
+        request.top_k,
+        request.metadata_filter,
+    )
+
     latency_ms = (time.perf_counter() - t0) * 1000
 
     source_docs = [SourceDocument(**s) for s in sources]
+
     response = QueryResponse(
         query=request.query,
         answer=answer,
@@ -142,7 +162,7 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
     # Persist to DB
     try:
         await log_query(
-            db,
+            db=db,
             request_id=None,
             query=request.query,
             answer=answer,
@@ -156,22 +176,37 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
 
     # Cache result
     await cache_service.set_cached(
-        request.query, response.model_dump(), request.top_k, request.metadata_filter
+        request.query,
+        response.model_dump(),
+        request.top_k,
+        request.metadata_filter,
     )
 
     logger.info(
         "Query answered | query=%r | sources=%d | latency=%.0fms",
-        request.query[:50], len(sources), latency_ms,
+        request.query[:50],
+        len(sources),
+        latency_ms,
     )
+
     return response
 
 
 async def _stream_answer(
-    request: QueryRequest, db: AsyncSession, user: str
+    request: QueryRequest,
+    db: AsyncSession,
+    user: str,
 ) -> AsyncGenerator[str, None]:
     """Server-Sent Events stream for progressive answer delivery."""
-    answer, sources = await async_query(request.query, request.top_k, request.metadata_filter)
+
+    answer, sources = await async_query(
+        request.query,
+        request.top_k,
+        request.metadata_filter,
+    )
+
     # Stream answer word by word
     for word in answer.split():
         yield f"data: {word} \n\n"
-    yield f"data: [DONE]\n\n"
+
+    yield "data: [DONE]\n\n"
