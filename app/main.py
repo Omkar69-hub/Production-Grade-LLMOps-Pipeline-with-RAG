@@ -1,185 +1,168 @@
 """
-Production-Grade RAG System — FastAPI Backend
-Handles document ingestion, retrieval-augmented QA, and S3 file management.
+app/main.py — FastAPI application factory (v2 enterprise edition).
+
+On first run the lifespan handler creates an admin user automatically
+using credentials from ADMIN_USERNAME / ADMIN_PASSWORD env vars.
+Change the password immediately after startup via:
+  POST /api/v1/users/me/password
 """
 
-import os
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from app.rag_pipeline import RAGPipeline
-from app.utils import setup_logging, save_upload_file_tmp
-from app.s3_utils import upload_file_to_s3, download_file_from_s3, list_files
 from app.config import get_settings
+from app.routers import ask, auth, documents, health, users
+from app.services.db_service import close_db, get_db_session, init_db
+from app.services.rag_service import get_rag_pipeline
+from app.services.cache_service import close_cache
+from app.services.user_service import seed_admin_if_empty
+from app.utils.exceptions import (
+    RAGBaseException,
+    generic_exception_handler,
+    rag_exception_handler,
+)
+from app.utils.logging import setup_logging
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
+# ─── Bootstrap logging ────────────────────────────────────────────────────────
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# ─── Global RAG Pipeline ─────────────────────────────────────────────────────
-rag: RAGPipeline | None = None
+# ─── Rate limiter ─────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
+# ─── Lifespan ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize & teardown the RAG pipeline."""
-    global rag
-    logger.info("Starting up — loading RAG pipeline …")
-    rag = RAGPipeline()
-    rag.load_existing_vectorstore()  # loads persisted index if present
-    logger.info("RAG pipeline ready.")
+    cfg = get_settings()
+    logger.info("=== RAG LLMOps API v%s starting ===", cfg.app_version)
+
+    # ── Database: create tables ───────────────────────────────────────────────
+    await init_db()
+
+    # ── Seed admin user on first run ──────────────────────────────────────────
+    admin_username = cfg.admin_username
+    admin_password = cfg.admin_password
+    async with get_db_session() as db:
+        created = await seed_admin_if_empty(
+            db, username=admin_username, password=admin_password
+        )
+        if created:
+            logger.warning(
+                "FIRST RUN: Admin user '%s' created. "
+                "Change the password NOW via POST /api/v1/users/me/password",
+                admin_username,
+            )
+
+    # ── RAG pipeline: load persisted FAISS index if present ───────────────────
+    pipeline = get_rag_pipeline()
+    pipeline.load_existing_vectorstore()
+    logger.info("RAG pipeline ready | vectorstore_loaded=%s", pipeline.is_ready())
+
     yield
-    logger.info("Shutting down RAG pipeline.")
+
+    # ── Teardown ──────────────────────────────────────────────────────────────
+    logger.info("Shutting down …")
+    await close_cache()
+    await close_db()
 
 
-# ─── App ─────────────────────────────────────────────────────────────────────
-cfg = get_settings()
+# ─── App factory ──────────────────────────────────────────────────────────────
+def create_app() -> FastAPI:
+    cfg = get_settings()
 
-app = FastAPI(
-    title="Production-Grade RAG API",
-    description=(
-        "LLMOps RAG system powered by LangChain, FAISS & Sentence-Transformers.\n\n"
-        "**Endpoints:**\n"
-        "- `GET /ask?query=…` — Query the RAG pipeline (convenience)\n"
-        "- `POST /ask` — Query the RAG pipeline (JSON body)\n"
-        "- `POST /upload` — Upload a document and index it into the vector store\n"
-        "- `GET /files` — List documents stored in S3\n"
-        "- `GET /documents` — List documents indexed in the local vector store\n"
-        "- `GET /health` — Health check\n"
-    ),
-    version="1.0.0",
-    lifespan=lifespan,
-)
+    app = FastAPI(
+        title=cfg.app_name,
+        version=cfg.app_version,
+        description=(
+            "## Production-Grade RAG LLMOps API\n\n"
+            "Enterprise-level Retrieval-Augmented Generation system.\n\n"
+            "### Quick Start\n"
+            "1. `POST /api/v1/auth/token` — Obtain a JWT (username/password)\n"
+            "2. Click **Authorize** above and paste the `access_token`\n"
+            "3. `POST /api/v1/documents/upload` — Upload a PDF/TXT/DOCX\n"
+            "4. `POST /api/v1/ask` — Ask a question\n\n"
+            "### First-Run Credentials\n"
+            "Username: `admin` | Password: value of `ADMIN_PASSWORD` env var\n\n"
+            "> **Security:** Change the admin password immediately via "
+            "`POST /api/v1/users/me/password`"
+        ),
+        openapi_tags=[
+            {"name": "System",         "description": "Health and monitoring"},
+            {"name": "Authentication", "description": "JWT token management"},
+            {"name": "Users",          "description": "User management (admin-only for most ops)"},
+            {"name": "QA",             "description": "Retrieval-Augmented Generation queries"},
+            {"name": "Documents",      "description": "Document ingestion and management"},
+        ],
+        lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cfg.cors_origins.split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    # ── Middleware ─────────────────────────────────────────────────────────────
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-
-# ─── Schemas ─────────────────────────────────────────────────────────────────
-class QueryRequest(BaseModel):
-    query: str
-    top_k: int = 4
-
-
-class QueryResponse(BaseModel):
-    answer: str
-    source_documents: list[str] = []
-
-
-# ─── Health ──────────────────────────────────────────────────────────────────
-@app.get("/health", tags=["System"], summary="Health check")
-def health_check():
-    """Returns service health and whether the vector store is loaded."""
-    return {
-        "status": "ok",
-        "vectorstore_loaded": rag is not None and rag.is_ready(),
-        "s3_enabled": cfg.s3_enabled,
-    }
-
-
-# ─── Upload Documents ────────────────────────────────────────────────────────
-@app.post("/upload", tags=["Documents"], summary="Upload & index a document")
-async def upload_document(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-):
-    """
-    Upload a PDF, TXT, or DOCX file.
-
-    The file is:
-    1. Saved temporarily on disk.
-    2. Uploaded to S3 (if configured).
-    3. Chunked, embedded, and indexed into FAISS (background task).
-    """
-    allowed = {".pdf", ".txt", ".docx"}
-    ext = os.path.splitext(file.filename)[-1].lower()
-    if ext not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type '{ext}'. Allowed: {allowed}",
+    # ── Request-ID + latency logging ──────────────────────────────────────────
+    @app.middleware("http")
+    async def request_context_middleware(request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+        request.state.request_id = request_id
+        t0 = time.perf_counter()
+        response = await call_next(request)
+        latency_ms = (time.perf_counter() - t0) * 1000
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Response-Time"] = f"{latency_ms:.1f}ms"
+        logger.info(
+            "HTTP %s %s → %d | %.0fms | id=%s",
+            request.method, request.url.path,
+            response.status_code, latency_ms, request_id,
         )
+        return response
 
-    tmp_path = await save_upload_file_tmp(file)
+    # ── Rate limiting ──────────────────────────────────────────────────────────
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    # S3 upload (non-blocking — if it fails, we still index locally)
-    s3_key = upload_file_to_s3(tmp_path, file.filename)
+    # ── Global exception handlers ──────────────────────────────────────────────
+    app.add_exception_handler(RAGBaseException, rag_exception_handler)
+    app.add_exception_handler(Exception, generic_exception_handler)
 
-    # Index in background so the HTTP response is fast
-    background_tasks.add_task(_index_document, tmp_path, file.filename)
-    logger.info("Queued '%s' for indexing (s3_key=%r).", file.filename, s3_key)
+    # ── Routers ───────────────────────────────────────────────────────────────
+    prefix = cfg.api_prefix
+    app.include_router(health.router)                        # GET  /health
+    app.include_router(auth.router,      prefix=prefix)      # POST /api/v1/auth/token
+    app.include_router(users.router,     prefix=prefix)      # /api/v1/users/**
+    app.include_router(ask.router,       prefix=prefix)      # /api/v1/ask/**
+    app.include_router(documents.router, prefix=prefix)      # /api/v1/documents/**
 
-    return {
-        "message": f"'{file.filename}' accepted for indexing.",
-        "status": "processing",
-        "s3_key": s3_key or None,
-    }
+    # ── Root ──────────────────────────────────────────────────────────────────
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return JSONResponse({
+            "message": "RAG LLMOps API",
+            "docs": "/docs",
+            "health": "/health",
+            "version": cfg.app_version,
+        })
 
-
-def _index_document(tmp_path: str, filename: str):
-    """Background task: load, chunk & embed document into FAISS."""
-    try:
-        rag.ingest(tmp_path, filename)
-        logger.info("Successfully indexed '%s'.", filename)
-    except Exception as exc:
-        logger.exception("Failed to index '%s': %s", filename, exc)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-
-# ─── Ask (POST) ───────────────────────────────────────────────────────────────
-@app.post("/ask", response_model=QueryResponse, tags=["QA"], summary="Query the RAG pipeline")
-def ask(request: QueryRequest):
-    """Submit a question via JSON body. Returns the LLM-generated answer and source snippets."""
-    if not rag or not rag.is_ready():
-        raise HTTPException(
-            status_code=503,
-            detail="Vector store not yet ready. Please upload documents first.",
-        )
-    try:
-        answer, sources = rag.query(request.query, top_k=request.top_k)
-        logger.info("Query answered | query=%r | sources=%d", request.query, len(sources))
-        return QueryResponse(answer=answer, source_documents=sources)
-    except Exception as exc:
-        logger.exception("Error during query: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    return app
 
 
-# ─── Ask (GET — convenience) ──────────────────────────────────────────────────
-@app.get("/ask", response_model=QueryResponse, tags=["QA"], summary="Query via GET param")
-def ask_get(
-    query: str = Query(..., description="Your question for the RAG system"),
-    top_k: int = Query(4, ge=1, le=20, description="Number of retrieved chunks"),
-):
-    """GET-based query endpoint — useful for quick browser testing."""
-    return ask(QueryRequest(query=query, top_k=top_k))
-
-
-# ─── List S3 Files ────────────────────────────────────────────────────────────
-@app.get("/files", tags=["Documents"], summary="List documents stored in S3")
-def list_s3_files():
-    """
-    Return all document objects stored in the configured S3 bucket.
-    Returns an empty list when S3 is not configured.
-    """
-    files = list_files()
-    logger.info("Listed %d files from S3.", len(files))
-    return {"files": files, "count": len(files)}
-
-
-# ─── List Indexed Docs ────────────────────────────────────────────────────────
-@app.get("/documents", tags=["Documents"], summary="List locally indexed documents")
-def list_documents():
-    """List documents currently indexed in the local FAISS vector store."""
-    docs = rag.list_ingested_docs() if rag else []
-    return {"documents": docs, "count": len(docs)}
+app = create_app()
