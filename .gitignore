@@ -18,6 +18,7 @@ env/
 # Secrets & config
 .env
 *.key
+*.pem
 
 # FAISS index (rebuilt on first run)
 vectorstore/
