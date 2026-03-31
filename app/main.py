@@ -144,9 +144,9 @@ def create_app() -> FastAPI:
                 "message": "RAG LLMOps API",
                 "docs": "/docs",
                 "health": "/health",
-            "version": cfg.app_version,
-        }
-    )
+                "version": cfg.app_version,
+            }
+        )
 
     return app
 
