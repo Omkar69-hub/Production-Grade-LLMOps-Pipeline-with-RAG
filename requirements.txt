@@ -64,3 +64,8 @@ flake8==7.0.0
 flake8-bugbear==24.4.26
 black==24.4.2
 isort==5.13.2
+
+aiofiles==25.1.0
+langchain-community==0.4.1
+aiosqlite==0.22.1
+sentence-transformers==5.3.0

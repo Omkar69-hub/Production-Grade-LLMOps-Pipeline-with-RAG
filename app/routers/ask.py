@@ -70,10 +70,10 @@ async def ask_post(
     summary="Query via GET parameter (convenience)",
 )
 async def ask_get(
-    query: Annotated[str, Query(..., min_length=1, max_length=2000)],
-    top_k: Annotated[int, Query(4, ge=1, le=20)],
     current_user: Annotated[str, Depends(lambda: None)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    query: Annotated[str, Query(min_length=1, max_length=2000)] = ...,
+    top_k: Annotated[int, Query(ge=1, le=20)] = 4,
 ) -> QueryResponse:
     if not get_rag_pipeline().is_ready():
         raise VectorStoreNotReadyError()
@@ -99,7 +99,6 @@ async def query_history(
     page_size: int = Query(20, ge=1, le=100),
 ) -> QueryHistoryResponse:
     from sqlalchemy import func, select
-
     from app.models.db_models import QueryLog
 
     total_q = await db.execute(select(func.count()).select_from(QueryLog))
@@ -131,7 +130,6 @@ async def query_history(
 async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryResponse:
     t0 = time.perf_counter()
 
-    # Cache lookup
     cached = await cache_service.get_cached(
         request.query,
         request.top_k,
@@ -142,7 +140,6 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
         logger.info("Cache HIT | query=%r", request.query[:50])
         return QueryResponse(**cached, cached=True)
 
-    # RAG query
     answer, sources = await async_query(
         request.query,
         request.top_k,
@@ -161,7 +158,6 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
         latency_ms=round(latency_ms, 1),
     )
 
-    # Persist to DB
     try:
         await log_query(
             db=db,
@@ -176,7 +172,6 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
     except Exception as exc:
         logger.warning("Failed to log query to DB: %s", exc)
 
-    # Cache result
     await cache_service.set_cached(
         request.query,
         response.model_dump(),
@@ -201,13 +196,12 @@ async def _stream_answer(
 ) -> AsyncGenerator[str, None]:
     """Server-Sent Events stream for progressive answer delivery."""
 
-    answer, sources = await async_query(
+    answer, _ = await async_query(
         request.query,
         request.top_k,
         request.metadata_filter,
     )
 
-    # Stream answer word by word
     for word in answer.split():
         yield f"data: {word} \n\n"
 
