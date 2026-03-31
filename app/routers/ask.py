@@ -68,10 +68,10 @@ async def ask_post(
     summary="Query via GET parameter (convenience)",
 )
 async def ask_get(
-    query: str = Query(..., min_length=1, max_length=2000),
-    top_k: int = Query(4, ge=1, le=20),
-    current_user: str = Depends(lambda: None),  # auth optional on GET
-    db: AsyncSession = Depends(get_db),
+    query: Annotated[str, Query(..., min_length=1, max_length=2000)],
+    top_k: Annotated[int, Query(4, ge=1, le=20)],
+    current_user: Annotated[str, Depends(lambda: None)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> QueryResponse:
     if not get_rag_pipeline().is_ready():
         raise VectorStoreNotReadyError()
