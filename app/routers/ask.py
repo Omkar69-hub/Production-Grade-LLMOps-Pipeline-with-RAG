@@ -98,7 +98,8 @@ async def query_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> QueryHistoryResponse:
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
+
     from app.models.db_models import QueryLog
 
     total_q = await db.execute(select(func.count()).select_from(QueryLog))

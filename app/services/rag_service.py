@@ -264,10 +264,10 @@ class RAGPipeline:
             self._chain = None
             return
         try:
-            from langchain_openai import ChatOpenAI
-            from langchain_core.prompts import ChatPromptTemplate
             from langchain_core.output_parsers import StrOutputParser
+            from langchain_core.prompts import ChatPromptTemplate
             from langchain_core.runnables import RunnablePassthrough
+            from langchain_openai import ChatOpenAI
 
             llm = ChatOpenAI(
                 model=self._cfg.llm_model,

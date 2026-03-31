@@ -13,18 +13,18 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.models.schemas import (
+    ChangePasswordRequest,
     UserCreateRequest,
     UserListResponse,
     UserProfileResponse,
-    ChangePasswordRequest,
 )
 from app.services import user_service
 from app.services.auth_service import TokenClaims, decode_access_token
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["Users"])

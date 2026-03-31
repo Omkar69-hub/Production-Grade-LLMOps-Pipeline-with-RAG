@@ -3,7 +3,9 @@ app/routers/health.py — Health and readiness check endpoint.
 """
 
 import time
+
 from fastapi import APIRouter
+
 from app.config import get_settings
 from app.models.schemas import HealthResponse
 from app.services.rag_service import get_rag_pipeline

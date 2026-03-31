@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import CurrentUser, get_db
@@ -20,7 +20,11 @@ from app.services import s3_service
 from app.services.db_service import log_document
 from app.services.rag_service import async_ingest, get_rag_pipeline
 from app.utils.exceptions import UnsupportedFileTypeError
-from app.utils.file_utils import safe_remove, save_upload_file_tmp, validate_file_extension
+from app.utils.file_utils import (
+    safe_remove,
+    save_upload_file_tmp,
+    validate_file_extension,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["Documents"])

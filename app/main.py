@@ -22,9 +22,9 @@ from slowapi.util import get_remote_address
 
 from app.config import get_settings
 from app.routers import ask, auth, documents, health, users
+from app.services.cache_service import close_cache
 from app.services.db_service import close_db, get_db_session, init_db
 from app.services.rag_service import get_rag_pipeline
-from app.services.cache_service import close_cache
 from app.services.user_service import seed_admin_if_empty
 from app.utils.exceptions import (
     RAGBaseException,
