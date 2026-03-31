@@ -28,6 +28,7 @@ MIN_PASSWORD_LENGTH = 8
 
 # ── Password helpers ──────────────────────────────────────────────────────────
 
+
 def hash_password(plain: str) -> str:
     """Return a bcrypt hash of *plain*."""
     return pwd_context.hash(plain)
@@ -39,6 +40,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
+
 
 async def create_user(
     db: AsyncSession,
@@ -57,9 +59,7 @@ async def create_user(
         If the username already exists or the password is too short.
     """
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError(
-            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
-        )
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.")
 
     # Uniqueness check
     existing = await get_user_by_username(db, username)
@@ -74,24 +74,20 @@ async def create_user(
         is_active=True,
     )
     db.add(user)
-    await db.flush()           # get id without full commit
+    await db.flush()  # get id without full commit
     logger.info("Created user '%s' (role=%s).", username, role)
     return user
 
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
     """Return the User row for *username*, or None if not found."""
-    result = await db.execute(
-        select(User).where(User.username == username)
-    )
+    result = await db.execute(select(User).where(User.username == username))
     return result.scalar_one_or_none()
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     """Return the User row for *user_id*, or None if not found."""
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
+    result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
 
@@ -131,15 +127,13 @@ async def authenticate(db: AsyncSession, username: str, password: str) -> User:
 
     # Use a dummy verify call even on missing user to avoid timing attacks
     dummy = hash_password("dummy-to-prevent-timing-leak")
-    password_ok = verify_password(
-        password, user.hashed_password if user else dummy)
+    password_ok = verify_password(password, user.hashed_password if user else dummy)
 
     if not user or not password_ok:
         raise AuthenticationError("Invalid username or password.")
 
     if not user.is_active:
-        raise AuthenticationError(
-            "Account is disabled. Contact an administrator.")
+        raise AuthenticationError("Account is disabled. Contact an administrator.")
 
     # Update last_login
     user.last_login = datetime.now(timezone.utc)
@@ -159,14 +153,10 @@ async def deactivate_user(db: AsyncSession, user_id: int) -> User:
     return user
 
 
-async def change_password(
-    db: AsyncSession, user_id: int, new_password: str
-) -> User:
+async def change_password(db: AsyncSession, user_id: int, new_password: str) -> User:
     """Update a user's password hash."""
     if len(new_password) < MIN_PASSWORD_LENGTH:
-        raise ValueError(
-            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
-        )
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.")
     user = await get_user_by_id(db, user_id)
     if not user:
         raise ValueError(f"User id={user_id} not found.")
@@ -178,6 +168,7 @@ async def change_password(
 
 # ── First-run seed ────────────────────────────────────────────────────────────
 
+
 async def seed_admin_if_empty(db: AsyncSession, *, username: str, password: str) -> bool:
     """
     Create the initial admin user ONLY if the users table is empty.
@@ -186,6 +177,7 @@ async def seed_admin_if_empty(db: AsyncSession, *, username: str, password: str)
     Returns True if the admin was created, False if users already exist.
     """
     from sqlalchemy import func
+
     count_result = await db.execute(select(func.count()).select_from(User))
     if count_result.scalar_one() > 0:
         return False

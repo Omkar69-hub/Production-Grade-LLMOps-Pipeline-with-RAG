@@ -29,6 +29,7 @@ router = APIRouter(prefix="/ask", tags=["QA"])
 
 # ── POST /ask ─────────────────────────────────────────────────────────────────
 
+
 @router.post(
     "",
     response_model=QueryResponse,
@@ -62,6 +63,7 @@ async def ask_post(
 
 # ── GET /ask ──────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "",
     response_model=QueryResponse,
@@ -83,6 +85,7 @@ async def ask_get(
 
 
 # ── GET /ask/history ──────────────────────────────────────────────────────────
+
 
 @router.get(
     "/history",
@@ -108,10 +111,7 @@ async def query_history(
         .limit(page_size)
     )
 
-    items = [
-        QueryHistoryItem.model_validate(row)
-        for row in items_q.scalars()
-    ]
+    items = [QueryHistoryItem.model_validate(row) for row in items_q.scalars()]
 
     total_pages = max(1, (total + page_size - 1) // page_size)
 
@@ -125,6 +125,7 @@ async def query_history(
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
 
 async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryResponse:
     t0 = time.perf_counter()

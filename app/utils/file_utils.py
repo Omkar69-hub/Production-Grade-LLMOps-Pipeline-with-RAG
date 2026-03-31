@@ -22,7 +22,7 @@ async def save_upload_file_tmp(upload: UploadFile) -> str:
         tmp_path = tmp.name
 
     async with aiofiles.open(tmp_path, "wb") as out_file:
-        while chunk := await upload.read(1024 * 64):   # 64 KB chunks
+        while chunk := await upload.read(1024 * 64):  # 64 KB chunks
             await out_file.write(chunk)
 
     return tmp_path
@@ -32,9 +32,7 @@ def validate_file_extension(filename: str) -> str:
     """Return lowercase extension or raise ValueError for unsupported types."""
     ext = os.path.splitext(filename or "")[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise ValueError(
-            f"Unsupported file type '{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}"
-        )
+        raise ValueError(f"Unsupported file type '{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}")
     return ext
 
 

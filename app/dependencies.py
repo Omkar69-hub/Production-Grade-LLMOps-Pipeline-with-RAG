@@ -18,9 +18,9 @@ _bearer = HTTPBearer(auto_error=False)
 
 # ── Auth — returns full TokenClaims (username + role) ─────────────────────────
 
+
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials |
-                           None, Depends(_bearer)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
 ) -> TokenClaims:
     """
     Dependency: validate Bearer JWT and return decoded TokenClaims.
@@ -49,6 +49,7 @@ DbSession = Annotated[object, Depends(get_db)]
 
 
 # ── Admin guard helper ────────────────────────────────────────────────────────
+
 
 def require_admin(claims: TokenClaims) -> None:
     """Raise HTTP 403 if the caller is not an admin."""

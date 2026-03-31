@@ -15,8 +15,7 @@ from typing import Any
 class JSONFormatter(logging.Formatter):
     """Emit each log record as a single JSON line."""
 
-    RESERVED = {"msg", "args", "exc_info",
-                "exc_text", "stack_info", "levelno", "lineno"}
+    RESERVED = {"msg", "args", "exc_info", "exc_text", "stack_info", "levelno", "lineno"}
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -49,8 +48,15 @@ def setup_logging(level: str | None = None) -> None:
     root.handlers = [handler]
 
     # Quieten noisy libs
-    for lib in ("httpx", "httpcore", "faiss", "sentence_transformers",
-                "botocore", "urllib3", "multipart"):
+    for lib in (
+        "httpx",
+        "httpcore",
+        "faiss",
+        "sentence_transformers",
+        "botocore",
+        "urllib3",
+        "multipart",
+    ):
         logging.getLogger(lib).setLevel(logging.WARNING)
 
 

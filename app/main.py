@@ -54,9 +54,7 @@ async def lifespan(app: FastAPI):
     admin_username = cfg.admin_username
     admin_password = cfg.admin_password
     async with get_db_session() as db:
-        created = await seed_admin_if_empty(
-            db, username=admin_username, password=admin_password
-        )
+        created = await seed_admin_if_empty(db, username=admin_username, password=admin_password)
         if created:
             logger.warning(
                 "FIRST RUN: Admin user '%s' created. "
@@ -67,8 +65,7 @@ async def lifespan(app: FastAPI):
     # ── RAG pipeline: load persisted FAISS index if present ───────────────────
     pipeline = get_rag_pipeline()
     pipeline.load_existing_vectorstore()
-    logger.info("RAG pipeline ready | vectorstore_loaded=%s",
-                pipeline.is_ready())
+    logger.info("RAG pipeline ready | vectorstore_loaded=%s", pipeline.is_ready())
 
     yield
 
@@ -99,13 +96,11 @@ def create_app() -> FastAPI:
             "`POST /api/v1/users/me/password`"
         ),
         openapi_tags=[
-            {"name": "System",         "description": "Health and monitoring"},
+            {"name": "System", "description": "Health and monitoring"},
             {"name": "Authentication", "description": "JWT token management"},
-            {"name": "Users",
-                "description": "User management (admin-only for most ops)"},
-            {"name": "QA",
-                "description": "Retrieval-Augmented Generation queries"},
-            {"name": "Documents",      "description": "Document ingestion and management"},
+            {"name": "Users", "description": "User management (admin-only for most ops)"},
+            {"name": "QA", "description": "Retrieval-Augmented Generation queries"},
+            {"name": "Documents", "description": "Document ingestion and management"},
         ],
         lifespan=lifespan,
         docs_url="/docs",
@@ -134,8 +129,11 @@ def create_app() -> FastAPI:
         response.headers["X-Response-Time"] = f"{latency_ms:.1f}ms"
         logger.info(
             "HTTP %s %s → %d | %.0fms | id=%s",
-            request.method, request.url.path,
-            response.status_code, latency_ms, request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+            latency_ms,
+            request_id,
         )
         return response
 
@@ -149,23 +147,25 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────────────────
     prefix = cfg.api_prefix
-    app.include_router(health.router)                        # GET  /health
+    app.include_router(health.router)  # GET  /health
     # POST /api/v1/auth/token
-    app.include_router(auth.router,      prefix=prefix)
-    app.include_router(users.router,     prefix=prefix)      # /api/v1/users/**
-    app.include_router(ask.router,       prefix=prefix)      # /api/v1/ask/**
+    app.include_router(auth.router, prefix=prefix)
+    app.include_router(users.router, prefix=prefix)  # /api/v1/users/**
+    app.include_router(ask.router, prefix=prefix)  # /api/v1/ask/**
     # /api/v1/documents/**
     app.include_router(documents.router, prefix=prefix)
 
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)
     async def root():
-        return JSONResponse({
-            "message": "RAG LLMOps API",
-            "docs": "/docs",
-            "health": "/health",
-            "version": cfg.app_version,
-        })
+        return JSONResponse(
+            {
+                "message": "RAG LLMOps API",
+                "docs": "/docs",
+                "health": "/health",
+                "version": cfg.app_version,
+            }
+        )
 
     return app
 

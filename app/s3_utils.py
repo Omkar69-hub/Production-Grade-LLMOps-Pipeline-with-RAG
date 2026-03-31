@@ -44,6 +44,7 @@ def _get_s3_client():
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def upload_file_to_s3(local_path: str, filename: str) -> str:
     """
     Upload a local file to S3 under the 'documents/' prefix.
@@ -63,16 +64,13 @@ def upload_file_to_s3(local_path: str, filename: str) -> str:
     """
     cfg = get_settings()
     if not cfg.s3_enabled:
-        logger.warning(
-            "S3 not configured — skipping upload of '%s'.", filename)
+        logger.warning("S3 not configured — skipping upload of '%s'.", filename)
         return ""
 
     key = f"{S3_PREFIX}{filename}"
     try:
         _get_s3_client().upload_file(local_path, cfg.s3_bucket_name, key)
-        logger.info(
-            "Uploaded '%s' → s3://%s/%s", filename, cfg.s3_bucket_name, key
-        )
+        logger.info("Uploaded '%s' → s3://%s/%s", filename, cfg.s3_bucket_name, key)
         return key
     except (BotoCoreError, ClientError) as exc:
         logger.error("S3 upload failed for '%s': %s", filename, exc)
@@ -105,9 +103,7 @@ def download_file_from_s3(key: str, dest_path: str) -> bool:
 
     try:
         _get_s3_client().download_file(cfg.s3_bucket_name, key, dest_path)
-        logger.info(
-            "Downloaded s3://%s/%s → %s", cfg.s3_bucket_name, key, dest_path
-        )
+        logger.info("Downloaded s3://%s/%s → %s", cfg.s3_bucket_name, key, dest_path)
         return True
     except (BotoCoreError, ClientError) as exc:
         logger.error("S3 download failed for key '%s': %s", key, exc)
@@ -130,9 +126,7 @@ def list_files() -> list[dict]:
         return []
 
     try:
-        response = _get_s3_client().list_objects_v2(
-            Bucket=cfg.s3_bucket_name, Prefix=S3_PREFIX
-        )
+        response = _get_s3_client().list_objects_v2(Bucket=cfg.s3_bucket_name, Prefix=S3_PREFIX)
         objects = response.get("Contents", [])
         return [
             {

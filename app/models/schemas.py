@@ -8,11 +8,12 @@ from datetime import datetime
 from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
-
 # ── Auth ──────────────────────────────────────────────────────────────────────
+
 
 class TokenRequest(BaseModel):
     """Credentials for obtaining a JWT."""
+
     username: str = Field(..., min_length=1, examples=["admin"])
     password: str = Field(..., min_length=1, examples=["changeme123"])
 
@@ -25,6 +26,7 @@ class TokenResponse(BaseModel):
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
+
 class UserCreateRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64, examples=["alice"])
     password: str = Field(..., min_length=8, examples=["str0ng-p@ssword!"])
@@ -36,7 +38,8 @@ class UserCreateRequest(BaseModel):
     def username_alphanumeric(cls, v: str) -> str:
         if not v.replace("_", "").replace("-", "").isalnum():
             raise ValueError(
-                "Username may only contain letters, numbers, hyphens, and underscores.")
+                "Username may only contain letters, numbers, hyphens, and underscores."
+            )
         return v.lower()
 
 
@@ -67,11 +70,10 @@ class UserListResponse(BaseModel):
 
 # ── QA / Ask ──────────────────────────────────────────────────────────────────
 
+
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=2000,
-                       examples=["What is RAG?"])
-    top_k: int = Field(
-        4, ge=1, le=20, description="Number of chunks to retrieve")
+    query: str = Field(..., min_length=1, max_length=2000, examples=["What is RAG?"])
+    top_k: int = Field(4, ge=1, le=20, description="Number of chunks to retrieve")
     metadata_filter: dict[str, Any] | None = Field(
         None, description="Optional metadata key-value filters"
     )
@@ -99,6 +101,7 @@ class QueryResponse(BaseModel):
 
 
 # ── Documents ─────────────────────────────────────────────────────────────────
+
 
 class UploadResponse(BaseModel):
     message: str
@@ -136,6 +139,7 @@ class S3FilesResponse(BaseModel):
 
 # ── Health ─────────────────────────────────────────────────────────────────────
 
+
 class HealthResponse(BaseModel):
     status: str
     vectorstore_loaded: bool
@@ -147,6 +151,7 @@ class HealthResponse(BaseModel):
 
 
 # ── Query History ─────────────────────────────────────────────────────────────
+
 
 class QueryHistoryItem(BaseModel):
     id: int
@@ -168,6 +173,7 @@ class QueryHistoryResponse(BaseModel):
 
 
 # ── Error ─────────────────────────────────────────────────────────────────────
+
 
 class ErrorDetail(BaseModel):
     code: str

@@ -16,11 +16,13 @@ def _get_redis():
     global _redis_client
     if _redis_client is None:
         from app.config import get_settings
+
         cfg = get_settings()
         if not cfg.redis_enabled:
             return None
         try:
             import redis.asyncio as aioredis
+
             _redis_client = aioredis.from_url(
                 cfg.redis_url,
                 encoding="utf-8",
@@ -28,8 +30,7 @@ def _get_redis():
                 socket_connect_timeout=2,
             )
         except Exception as exc:
-            logger.warning(
-                "Redis connection failed — caching disabled: %s", exc)
+            logger.warning("Redis connection failed — caching disabled: %s", exc)
             return None
     return _redis_client
 
@@ -74,11 +75,11 @@ async def set_cached(
         return
     try:
         from app.config import get_settings
+
         cfg = get_settings()
         key = _cache_key(query, top_k, metadata_filter)
         await client.setex(key, ttl or cfg.cache_ttl_seconds, json.dumps(response))
-        logger.debug("Cache SET for key %s (ttl=%ds)",
-                     key[:16], ttl or cfg.cache_ttl_seconds)
+        logger.debug("Cache SET for key %s (ttl=%ds)", key[:16], ttl or cfg.cache_ttl_seconds)
     except Exception as exc:
         logger.warning("Cache SET error: %s", exc)
 

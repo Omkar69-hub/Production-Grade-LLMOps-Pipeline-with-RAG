@@ -26,6 +26,7 @@ async def health_check() -> HealthResponse:
     db_ok = False
     try:
         from app.services.db_service import _get_engine
+
         async with _get_engine().connect() as conn:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         db_ok = True

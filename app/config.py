@@ -53,10 +53,10 @@ class Settings(BaseSettings):
     chunk_overlap: int = 50
 
     # ── Hybrid Search ─────────────────────────────────────────────────────────
-    bm25_weight: float = 0.3        # weight for BM25 in hybrid search
-    vector_weight: float = 0.7      # weight for vector similarity
-    reranker_top_k: int = 10        # candidates fed to re-ranker
-    final_top_k: int = 4            # results returned after re-ranking
+    bm25_weight: float = 0.3  # weight for BM25 in hybrid search
+    vector_weight: float = 0.7  # weight for vector similarity
+    reranker_top_k: int = 10  # candidates fed to re-ranker
+    final_top_k: int = 4  # results returned after re-ranking
 
     # ── AWS / S3 ──────────────────────────────────────────────────────────────
     aws_access_key_id: str = ""
@@ -69,8 +69,8 @@ class Settings(BaseSettings):
 
     # ── Redis (caching) ───────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379"
-    cache_ttl_seconds: int = 300    # 5 minutes default TTL
-    redis_enabled: bool = False     # set True when Redis is available
+    cache_ttl_seconds: int = 300  # 5 minutes default TTL
+    redis_enabled: bool = False  # set True when Redis is available
 
     # ── MLflow Tracking ───────────────────────────────────────────────────────
     mlflow_tracking_uri: str = "http://localhost:5000"
@@ -80,11 +80,7 @@ class Settings(BaseSettings):
     # ── Properties ────────────────────────────────────────────────────────────
     @property
     def s3_enabled(self) -> bool:
-        return bool(
-            self.aws_access_key_id
-            and self.aws_secret_access_key
-            and self.s3_bucket_name
-        )
+        return bool(self.aws_access_key_id and self.aws_secret_access_key and self.s3_bucket_name)
 
     @property
     def cors_origins_list(self) -> list[str]:

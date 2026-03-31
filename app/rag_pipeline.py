@@ -25,15 +25,20 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
 DOCS_META_PATH = os.path.join(VECTORSTORE_PATH, "ingested_docs.json")
 
 # Prompt template for RAG chain
-RAG_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", (
-        "You are a helpful assistant. Answer the user's question using ONLY the context "
-        "provided below. If the context does not contain enough information to answer, "
-        "say 'I don't have enough information to answer that based on the uploaded documents.'\n\n"
-        "Context:\n{context}"
-    )),
-    ("human", "{question}"),
-])
+RAG_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            (
+                "You are a helpful assistant. Answer the user's question using ONLY the context "
+                "provided below. If the context does not contain enough information to answer, "
+                "say 'I don't have enough information to answer that based on the uploaded documents.'\n\n"
+                "Context:\n{context}"
+            ),
+        ),
+        ("human", "{question}"),
+    ]
+)
 
 
 class RAGPipeline:
@@ -84,8 +89,7 @@ class RAGPipeline:
                     allow_dangerous_deserialization=True,
                 )
                 self._build_chain()
-                logger.info(
-                    "Loaded existing vectorstore from '%s'.", VECTORSTORE_PATH)
+                logger.info("Loaded existing vectorstore from '%s'.", VECTORSTORE_PATH)
             except Exception as exc:
                 logger.warning("Could not load existing vectorstore: %s", exc)
 
@@ -93,10 +97,7 @@ class RAGPipeline:
         """Load, chunk, embed, and persist a document."""
         docs = self._load_file(file_path)
         chunks = self._splitter.split_documents(docs)
-        logger.info(
-            "Ingesting '%s': %d raw docs → %d chunks.", filename, len(
-                docs), len(chunks)
-        )
+        logger.info("Ingesting '%s': %d raw docs → %d chunks.", filename, len(docs), len(chunks))
 
         if self._vectorstore is None:
             self._vectorstore = FAISS.from_documents(chunks, self._embeddings)
@@ -125,11 +126,11 @@ class RAGPipeline:
 
         if self._chain is not None:
             answer = self._chain.invoke(
-                {"question": question, "context": _format_docs(source_docs)})
+                {"question": question, "context": _format_docs(source_docs)}
+            )
         else:
             # Fallback: return the retrieved context directly
-            answer = "\n\n---\n\n".join(
-                sources) if sources else "No relevant documents found."
+            answer = "\n\n---\n\n".join(sources) if sources else "No relevant documents found."
 
         return answer, sources
 
@@ -144,6 +145,7 @@ class RAGPipeline:
             return
         try:
             from langchain_openai import ChatOpenAI
+
             llm = ChatOpenAI(
                 model=LLM_MODEL,
                 temperature=0,
@@ -157,8 +159,7 @@ class RAGPipeline:
             )
             logger.info("LCEL RAG chain built with model '%s'.", LLM_MODEL)
         except Exception as exc:
-            logger.warning(
-                "Could not build LLM chain: %s — falling back to retrieval-only.", exc)
+            logger.warning("Could not build LLM chain: %s — falling back to retrieval-only.", exc)
             self._chain = None
 
     @staticmethod

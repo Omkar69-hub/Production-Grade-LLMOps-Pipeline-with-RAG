@@ -65,6 +65,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 # ── FastAPI dependency ────────────────────────────────────────────────────────
 
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency: yields an AsyncSession."""
     async with _get_session_factory()() as session:
@@ -77,6 +78,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 # ── Repository helpers ────────────────────────────────────────────────────────
+
 
 async def log_query(
     session: AsyncSession,

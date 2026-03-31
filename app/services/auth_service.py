@@ -26,12 +26,14 @@ logger = logging.getLogger(__name__)
 
 # ── Token claims dataclass ─────────────────────────────────────────────────────
 
+
 class TokenClaims:
     """Decoded JWT payload, available in request handlers via dependency injection."""
+
     __slots__ = ("sub", "role")
 
     def __init__(self, sub: str, role: str = "viewer"):
-        self.sub = sub        # username
+        self.sub = sub  # username
         self.role = role
 
     def is_admin(self) -> bool:
@@ -39,6 +41,7 @@ class TokenClaims:
 
 
 # ── JWT helpers ────────────────────────────────────────────────────────────────
+
 
 def create_access_token(username: str, role: str = "viewer") -> tuple[str, int]:
     """

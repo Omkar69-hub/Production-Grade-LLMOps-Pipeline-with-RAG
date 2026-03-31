@@ -5,11 +5,12 @@ app/utils/exceptions.py — Custom exception hierarchy and global handler.
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
-
 # ── Custom Exceptions ─────────────────────────────────────────────────────────
+
 
 class RAGBaseException(Exception):
     """Root exception for all application errors."""
+
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_code: str = "INTERNAL_ERROR"
 
@@ -60,6 +61,7 @@ class RateLimitError(RAGBaseException):
 
 # ── Global Exception Handlers ─────────────────────────────────────────────────
 
+
 def _error_body(error_code: str, message: str, request_id: str | None = None) -> dict:
     body = {"error": {"code": error_code, "message": message}}
     if request_id:
@@ -77,12 +79,11 @@ async def rag_exception_handler(request: Request, exc: RAGBaseException) -> JSON
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     import logging
+
     logger = logging.getLogger(__name__)
     request_id = getattr(request.state, "request_id", None)
-    logger.exception(
-        "Unhandled exception [request_id=%s]", request_id, exc_info=exc)
+    logger.exception("Unhandled exception [request_id=%s]", request_id, exc_info=exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=_error_body(
-            "INTERNAL_ERROR", "An internal server error occurred.", request_id),
+        content=_error_body("INTERNAL_ERROR", "An internal server error occurred.", request_id),
     )

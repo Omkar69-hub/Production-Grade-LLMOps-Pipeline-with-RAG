@@ -28,6 +28,7 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 
 # ── POST /documents/upload ────────────────────────────────────────────────────
 
+
 @router.post(
     "/upload",
     response_model=UploadResponse,
@@ -78,8 +79,7 @@ async def upload_document(
 
     # Background indexing
     background_tasks.add_task(_index_in_background, tmp_path, file.filename)
-    logger.info("Accepted '%s' for indexing (size=%d bytes).",
-                file.filename, file_size)
+    logger.info("Accepted '%s' for indexing (size=%d bytes).", file.filename, file_size)
 
     return UploadResponse(
         message=f"'{file.filename}' accepted for indexing.",
@@ -90,6 +90,7 @@ async def upload_document(
 
 
 # ── GET /documents ────────────────────────────────────────────────────────────
+
 
 @router.get(
     "",
@@ -105,15 +106,19 @@ async def list_documents(
     all_docs = pipeline.list_ingested_docs()
     total = len(all_docs)
     start = (page - 1) * page_size
-    page_docs = all_docs[start: start + page_size]
+    page_docs = all_docs[start : start + page_size]
     total_pages = max(1, (total + page_size - 1) // page_size)
     return DocumentListResponse(
-        documents=page_docs, count=total,
-        page=page, page_size=page_size, total_pages=total_pages,
+        documents=page_docs,
+        count=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
     )
 
 
 # ── GET /documents/files ──────────────────────────────────────────────────────
+
 
 @router.get(
     "/files",
@@ -128,11 +133,14 @@ async def list_s3_files(
     files, total = await s3_service.list_files(page=page, page_size=page_size)
     return S3FilesResponse(
         files=[S3FileInfo(**f) for f in files],
-        count=total, page=page, page_size=page_size,
+        count=total,
+        page=page,
+        page_size=page_size,
     )
 
 
 # ── DELETE /documents/cache ───────────────────────────────────────────────────
+
 
 @router.delete(
     "/cache",
@@ -141,11 +149,13 @@ async def list_s3_files(
 )
 async def invalidate_cache(current_user: CurrentUser) -> dict:
     from app.services import cache_service
+
     deleted = await cache_service.invalidate_all()
     return {"message": f"Cache invalidated. {deleted} keys removed."}
 
 
 # ── Background task ───────────────────────────────────────────────────────────
+
 
 async def _index_in_background(tmp_path: str, filename: str):
     try:

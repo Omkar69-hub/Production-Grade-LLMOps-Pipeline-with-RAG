@@ -34,9 +34,9 @@ _bearer = HTTPBearer(auto_error=False)
 
 # ── Shared dependency: decode JWT and return claims ────────────────────────────
 
+
 async def get_claims(
-    credentials: Annotated[HTTPAuthorizationCredentials |
-                           None, Depends(_bearer)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
 ) -> TokenClaims:
     if not credentials:
         raise HTTPException(
@@ -64,6 +64,7 @@ def require_admin(claims: TokenClaims) -> None:
 
 # ── POST /users — create a new user (admin only) ──────────────────────────────
 
+
 @router.post(
     "",
     response_model=UserProfileResponse,
@@ -85,13 +86,13 @@ async def create_user(
             role=body.role,
         )
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     return UserProfileResponse.model_validate(user)
 
 
 # ── GET /users — list all users (admin only) ──────────────────────────────────
+
 
 @router.get(
     "",
@@ -118,6 +119,7 @@ async def list_users(
 
 # ── GET /users/me — own profile ───────────────────────────────────────────────
 
+
 @router.get(
     "/me",
     response_model=UserProfileResponse,
@@ -134,6 +136,7 @@ async def get_my_profile(
 
 
 # ── POST /users/me/password — change own password ─────────────────────────────
+
 
 @router.post(
     "/me/password",
@@ -157,13 +160,13 @@ async def change_my_password(
         user = await user_service.get_user_by_username(db, claims.sub)
         await user_service.change_password(db, user.id, body.new_password)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     return {"message": "Password updated successfully."}
 
 
 # ── DELETE /users/{user_id} — deactivate (admin only) ────────────────────────
+
 
 @router.delete(
     "/{user_id}",
@@ -179,6 +182,5 @@ async def deactivate_user(
     try:
         user = await user_service.deactivate_user(db, user_id)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return {"message": f"User '{user.username}' deactivated.", "id": user.id}

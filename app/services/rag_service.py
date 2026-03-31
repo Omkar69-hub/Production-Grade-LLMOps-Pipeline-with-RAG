@@ -37,6 +37,7 @@ def get_rag_pipeline() -> "RAGPipeline":
 
 # ── RAG Pipeline ──────────────────────────────────────────────────────────────
 
+
 class RAGPipeline:
     """Production RAG pipeline: hybrid BM25 + vector search with re-ranking."""
 
@@ -48,6 +49,7 @@ class RAGPipeline:
 
         # Embedding model
         from langchain_community.embeddings import HuggingFaceEmbeddings
+
         self._embeddings = HuggingFaceEmbeddings(
             model_name=cfg.embed_model,
             model_kwargs={"device": "cpu"},
@@ -55,23 +57,22 @@ class RAGPipeline:
 
         # Vector store + BM25 corpus (in-memory)
         from langchain_community.vectorstores import FAISS
+
         self._vectorstore: Optional[FAISS] = None
         self._bm25 = None
-        self._all_docs: list = []       # raw LangChain Documents kept for BM25
+        self._all_docs: list = []  # raw LangChain Documents kept for BM25
 
         # LLM chain
         self._chain = None
 
         # Ingested doc registry
-        self._meta_path = os.path.join(
-            cfg.vectorstore_path, "ingested_docs.json")
+        self._meta_path = os.path.join(cfg.vectorstore_path, "ingested_docs.json")
         self._ingested: list[str] = self._load_meta()
 
         # Cross-encoder re-ranker (optional — will skip if not importable)
         self._reranker = self._build_reranker()
 
-        logger.info("RAGPipeline initialised (embed_model=%s).",
-                    cfg.embed_model)
+        logger.info("RAGPipeline initialised (embed_model=%s).", cfg.embed_model)
 
     # ── Public interface ──────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ class RAGPipeline:
     def load_existing_vectorstore(self):
         """Load a persisted FAISS index from disk (if it exists)."""
         from langchain_community.vectorstores import FAISS
+
         index_file = os.path.join(self._cfg.vectorstore_path, "index.faiss")
         if os.path.exists(index_file):
             try:
@@ -94,8 +96,7 @@ class RAGPipeline:
                 )
                 self._rebuild_bm25()
                 self._build_chain()
-                logger.info("Loaded FAISS index from '%s'.",
-                            self._cfg.vectorstore_path)
+                logger.info("Loaded FAISS index from '%s'.", self._cfg.vectorstore_path)
             except Exception as exc:
                 logger.warning("Could not load vectorstore: %s", exc)
 
@@ -110,6 +111,7 @@ class RAGPipeline:
         chunk_size = self.CHUNK_SIZE_BY_EXT.get(ext, self._cfg.chunk_size)
 
         from langchain_text_splitters import RecursiveCharacterTextSplitter
+
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=self._cfg.chunk_overlap,
@@ -124,6 +126,7 @@ class RAGPipeline:
         # Add to FAISS
         if self._vectorstore is None:
             from langchain_community.vectorstores import FAISS
+
             self._vectorstore = FAISS.from_documents(chunks, self._embeddings)
         else:
             self._vectorstore.add_documents(chunks)
@@ -140,10 +143,7 @@ class RAGPipeline:
         self._save_meta()
 
         elapsed = (time.perf_counter() - start) * 1000
-        logger.info(
-            "Ingested '%s': %d chunks in %.0fms.", filename, len(
-                chunks), elapsed
-        )
+        logger.info("Ingested '%s': %d chunks in %.0fms.", filename, len(chunks), elapsed)
 
         # MLflow tracking
         self._track_ingestion(filename, len(chunks), elapsed)
@@ -166,10 +166,10 @@ class RAGPipeline:
         """
         if not self.is_ready():
             from app.utils.exceptions import VectorStoreNotReadyError
+
             raise VectorStoreNotReadyError()
 
-        candidates = self._hybrid_retrieve(
-            question, top_k=self._cfg.reranker_top_k)
+        candidates = self._hybrid_retrieve(question, top_k=self._cfg.reranker_top_k)
         reranked = self._rerank(question, candidates, top_k=top_k)
         sources = [
             {
@@ -182,12 +182,12 @@ class RAGPipeline:
 
         if self._chain is not None:
             context = "\n\n".join(d.page_content for d, _ in reranked)
-            answer = self._chain.invoke(
-                {"question": question, "context": context})
+            answer = self._chain.invoke({"question": question, "context": context})
         else:
             # Retrieval-only fallback
-            answer = "\n\n---\n\n".join(s["content"]
-                                        for s in sources) or "No relevant documents found."
+            answer = (
+                "\n\n---\n\n".join(s["content"] for s in sources) or "No relevant documents found."
+            )
 
         return answer, sources
 
@@ -199,8 +199,7 @@ class RAGPipeline:
 
         # Vector retrieval with scores
         try:
-            vec_results = self._vectorstore.similarity_search_with_score(
-                question, k=top_k)
+            vec_results = self._vectorstore.similarity_search_with_score(question, k=top_k)
         except Exception as exc:
             logger.warning("Vector search error: %s", exc)
             vec_results = []
@@ -211,13 +210,10 @@ class RAGPipeline:
         try:
             tokenized_q = question.lower().split()
             scores = self._bm25.get_scores(tokenized_q)
-            bm25_top = sorted(
-                enumerate(scores), key=lambda x: x[1], reverse=True
-            )[:top_k]
+            bm25_top = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)[:top_k]
             bm25_results = [(self._all_docs[i], s) for i, s in bm25_top]
         except Exception as exc:
-            logger.warning(
-                "BM25 retrieval error: %s — using vector-only.", exc)
+            logger.warning("BM25 retrieval error: %s — using vector-only.", exc)
             return [doc for doc, _ in vec_results]
 
         # Reciprocal Rank Fusion
@@ -226,18 +222,15 @@ class RAGPipeline:
 
         for rank, (doc, _) in enumerate(vec_results):
             key = doc.page_content[:100]
-            scores_map[key] = scores_map.get(
-                key, 0) + cfg.vector_weight / (rank + 1)
+            scores_map[key] = scores_map.get(key, 0) + cfg.vector_weight / (rank + 1)
             doc_map[key] = doc
 
         for rank, (doc, _) in enumerate(bm25_results):
             key = doc.page_content[:100]
-            scores_map[key] = scores_map.get(
-                key, 0) + cfg.bm25_weight / (rank + 1)
+            scores_map[key] = scores_map.get(key, 0) + cfg.bm25_weight / (rank + 1)
             doc_map[key] = doc
 
-        merged = sorted(scores_map.items(),
-                        key=lambda x: x[1], reverse=True)[:top_k]
+        merged = sorted(scores_map.items(), key=lambda x: x[1], reverse=True)[:top_k]
         return [doc_map[k] for k, _ in merged]
 
     def _rerank(self, question: str, docs: list, top_k: int) -> list[tuple]:
@@ -247,8 +240,7 @@ class RAGPipeline:
         try:
             pairs = [[question, d.page_content] for d in docs]
             scores = self._reranker.predict(pairs)
-            ranked = sorted(zip(docs, scores),
-                            key=lambda x: x[1], reverse=True)
+            ranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
             return ranked[:top_k]
         except Exception as exc:
             logger.warning("Re-ranker error: %s — skipping re-ranking.", exc)
@@ -260,8 +252,8 @@ class RAGPipeline:
             return
         try:
             from rank_bm25 import BM25Okapi
-            tokenized = [doc.page_content.lower().split()
-                         for doc in self._all_docs]
+
+            tokenized = [doc.page_content.lower().split() for doc in self._all_docs]
             self._bm25 = BM25Okapi(tokenized)
         except ImportError:
             logger.info("rank_bm25 not installed — vector-only search active.")
@@ -283,28 +275,31 @@ class RAGPipeline:
                 api_key=self._cfg.openai_api_key,
                 streaming=False,
             )
-            prompt = ChatPromptTemplate.from_messages([
-                ("system",
-                 "You are a helpful assistant. Answer using ONLY the provided context.\n"
-                 "If the context is insufficient, say so honestly.\n\nContext:\n{context}"),
-                ("human", "{question}"),
-            ])
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "You are a helpful assistant. Answer using ONLY the provided context.\n"
+                        "If the context is insufficient, say so honestly.\n\nContext:\n{context}",
+                    ),
+                    ("human", "{question}"),
+                ]
+            )
             self._chain = (
                 {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
                 | prompt
                 | llm
                 | StrOutputParser()
             )
-            logger.info("LCEL chain built with model '%s'.",
-                        self._cfg.llm_model)
+            logger.info("LCEL chain built with model '%s'.", self._cfg.llm_model)
         except Exception as exc:
-            logger.warning(
-                "Could not build LLM chain: %s — retrieval-only mode.", exc)
+            logger.warning("Could not build LLM chain: %s — retrieval-only mode.", exc)
             self._chain = None
 
     def _build_reranker(self):
         try:
             from sentence_transformers import CrossEncoder
+
             model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
             logger.info("Cross-encoder re-ranker loaded.")
             return model
@@ -318,6 +313,7 @@ class RAGPipeline:
             return
         try:
             import mlflow
+
             mlflow.set_tracking_uri(cfg.mlflow_tracking_uri)
             mlflow.set_experiment(cfg.mlflow_experiment)
             with mlflow.start_run(run_name=f"ingest-{filename}"):
@@ -332,12 +328,15 @@ class RAGPipeline:
         ext = os.path.splitext(file_path)[-1].lower()
         if ext == ".pdf":
             from langchain_community.document_loaders import PyPDFLoader
+
             return PyPDFLoader(file_path).load()
         elif ext == ".txt":
             from langchain_community.document_loaders import TextLoader
+
             return TextLoader(file_path, encoding="utf-8").load()
         elif ext == ".docx":
             from langchain_community.document_loaders import Docx2txtLoader
+
             return Docx2txtLoader(file_path).load()
         raise ValueError(f"Unsupported file type: {ext}")
 
@@ -354,6 +353,7 @@ class RAGPipeline:
 
 
 # ── Async wrappers ─────────────────────────────────────────────────────────────
+
 
 async def async_ingest(
     file_path: str,

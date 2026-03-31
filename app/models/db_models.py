@@ -18,8 +18,7 @@ class QueryLog(Base):
 
     __tablename__ = "query_logs"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     request_id: Mapped[str | None] = mapped_column(String(32), index=True)
     query: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
@@ -37,15 +36,14 @@ class DocumentLog(Base):
 
     __tablename__ = "document_logs"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
-    filename: Mapped[str] = mapped_column(
-        String(512), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    filename: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     s3_key: Mapped[str | None] = mapped_column(String(1024))
     file_size_bytes: Mapped[int | None] = mapped_column(Integer)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(
-        String(32), default="processing")  # processing|indexed|failed
+        String(32), default="processing"
+    )  # processing|indexed|failed
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
@@ -63,21 +61,11 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(
-        String(64), nullable=False, unique=True, index=True
-    )
-    email: Mapped[str | None] = mapped_column(
-        String(255), unique=True, index=True
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(256), nullable=False)
-    role: Mapped[str] = mapped_column(
-        String(16), default="viewer"          # admin | viewer
-    )
+    role: Mapped[str] = mapped_column(String(16), default="viewer")  # admin | viewer
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    last_login: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
