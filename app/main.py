@@ -46,24 +46,14 @@ async def lifespan(app: FastAPI):
     # ✅ STEP 1: Initialize DB (FIXES YOUR ERROR)
     await init_db()
 
-    # ✅ STEP 2: Seed admin (safe)
-    import os
-
+    # ✅ STEP 2: Seed admin on first run (uses ADMIN_USERNAME / ADMIN_PASSWORD env vars)
     async with get_db_session() as db:
         try:
-            if os.getenv("PYTEST_CURRENT_TEST"):
-                # ✅ FIX: force test credentials
-                await seed_admin_if_empty(
-                    db,
-                    username="admin",
-                    password="secret",
-                )
-            else:
-                await seed_admin_if_empty(
-                    db,
-                    username=cfg.admin_username,
-                    password=cfg.admin_password,
-                )
+            await seed_admin_if_empty(
+                db,
+                username=cfg.admin_username,
+                password=cfg.admin_password,
+            )
         except Exception as e:
             logger.warning(f"Admin seed skipped: {e}")
 

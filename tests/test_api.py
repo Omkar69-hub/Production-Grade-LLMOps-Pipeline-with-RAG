@@ -14,14 +14,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-# Must be set before app imports
-os.environ.update({
-    "OPENAI_API_KEY": "",
-    "S3_BUCKET_NAME": "",
-    "REDIS_ENABLED": "false",
-    "DATABASE_URL": "sqlite+aiosqlite:///./test_rag.db",
-    "SECRET_KEY": "test-secret-key-minimum-32-chars-long!!",
-})
+# Must be set before app imports so pydantic-settings picks them up on first call.
+# ADMIN_PASSWORD must match the password used in the auth_token fixture below.
+os.environ.update(
+    {
+        "OPENAI_API_KEY": "",
+        "S3_BUCKET_NAME": "",
+        "REDIS_ENABLED": "false",
+        "DATABASE_URL": "sqlite+aiosqlite:///./test_rag.db",
+        "SECRET_KEY": "test-secret-key-minimum-32-chars-long!!",
+        "ADMIN_USERNAME": "admin",
+        "ADMIN_PASSWORD": "secret123",  # seed password used by seed_admin_if_empty() — min 8 chars
+    }
+)
 
 from app.main import app  # noqa: E402
 
@@ -30,12 +35,13 @@ client = TestClient(app)
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def auth_token() -> str:
     """Obtain a real JWT for the demo user."""
     resp = client.post(
         "/api/v1/auth/token",
-        json={"username": "admin", "password": "secret"},
+        json={"username": "admin", "password": "secret123"},
     )
     assert resp.status_code == 200
     return resp.json()["access_token"]
@@ -47,6 +53,7 @@ def auth_headers(auth_token: str) -> dict:
 
 
 # ─── Health ────────────────────────────────────────────────────────────────────
+
 
 def test_health():
     resp = client.get("/health")
@@ -62,10 +69,11 @@ def test_health():
 
 # ─── Authentication ─────────────────────────────────────────────────────────────
 
+
 def test_login_success():
     resp = client.post(
         "/api/v1/auth/token",
-        json={"username": "admin", "password": "secret"},
+        json={"username": "admin", "password": "secret123"},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -89,6 +97,7 @@ def test_protected_endpoint_without_token():
 
 
 # ─── Ask ──────────────────────────────────────────────────────────────────────
+
 
 def test_ask_post_vectorstore_not_ready(auth_headers):
     """When no docs are indexed, /ask should return 503."""
@@ -119,7 +128,9 @@ def test_ask_returns_cache_flag_when_cached(auth_headers):
         "latency_ms": 1.0,
         "request_id": None,
     }
-    with patch("app.routers.ask.cache_service.get_cached", new=AsyncMock(return_value=mock_response)):
+    with patch(
+        "app.routers.ask.cache_service.get_cached", new=AsyncMock(return_value=mock_response)
+    ):
         with patch("app.routers.ask.get_rag_pipeline") as mock_pipeline:
             mock_pipeline.return_value.is_ready.return_value = True
             resp = client.post(
@@ -132,6 +143,7 @@ def test_ask_returns_cache_flag_when_cached(auth_headers):
 
 
 # ─── Documents — Upload ────────────────────────────────────────────────────────
+
 
 def test_upload_invalid_file_type(auth_headers):
     resp = client.post(
@@ -147,7 +159,9 @@ def test_upload_txt_accepted(auth_headers):
     """Valid .txt upload should be queued (processing)."""
     content = b"RAG stands for Retrieval-Augmented Generation."
     with patch("app.routers.documents.async_ingest", new=AsyncMock(return_value=5)):
-        with patch("app.routers.documents.s3_service.upload_file_to_s3", new=AsyncMock(return_value="")):
+        with patch(
+            "app.routers.documents.s3_service.upload_file_to_s3", new=AsyncMock(return_value="")
+        ):
             resp = client.post(
                 "/api/v1/documents/upload",
                 files={"file": ("test_doc.txt", BytesIO(content), "text/plain")},
@@ -160,6 +174,7 @@ def test_upload_txt_accepted(auth_headers):
 
 
 # ─── Documents — Listing ──────────────────────────────────────────────────────
+
 
 def test_list_documents(auth_headers):
     resp = client.get("/api/v1/documents", headers=auth_headers)
@@ -191,6 +206,7 @@ def test_list_s3_files_with_mock(auth_headers):
 
 
 # ─── Error Handling ────────────────────────────────────────────────────────────
+
 
 def test_root_redirect():
     """Root should return API info."""

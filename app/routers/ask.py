@@ -139,7 +139,9 @@ async def _handle_query(request: QueryRequest, db: AsyncSession) -> QueryRespons
 
     if cached:
         logger.info("Cache HIT | query=%r", request.query[:50])
-        return QueryResponse(**cached, cached=True)
+        cached_data = dict(cached)
+        cached_data["cached"] = True
+        return QueryResponse(**cached_data)
 
     answer, sources = await async_query(
         request.query,
