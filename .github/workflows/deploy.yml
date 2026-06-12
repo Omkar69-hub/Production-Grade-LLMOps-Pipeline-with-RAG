@@ -67,12 +67,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install fastapi uvicorn httpx pytest pytest-asyncio python-dotenv \
-                      pydantic pydantic-settings langchain langchain-community \
-                      langchain-openai langchain-text-splitters openai boto3 \
-                      faiss-cpu sentence-transformers pypdf docx2txt aiofiles \
-                      sqlalchemy aiosqlite python-jose passlib slowapi redis \
-                      rank-bm25
+          pip install -r requirements.txt
 
       - name: Run tests
         env:
@@ -80,7 +75,9 @@ jobs:
           REDIS_URL: "redis://localhost:6379"
           REDIS_ENABLED: "false"        # keep tests deterministic
           DATABASE_URL: "sqlite+aiosqlite:///./test_rag.db"
-          SECRET_KEY: "test-secret-key-for-ci"
+          SECRET_KEY: "test-secret-key-minimum-32-chars-long!!"
+          ADMIN_USERNAME: "admin"
+          ADMIN_PASSWORD: "secret"      # matches auth_token fixture in test_api.py
         run: pytest tests/ -v --tb=short --asyncio-mode=auto
 
       - name: Upload test results
