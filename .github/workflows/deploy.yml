@@ -143,6 +143,13 @@ jobs:
     environment: production
 
     steps:
+      - name: Test Network Connectivity to EC2
+        run: |
+          echo "GitHub Actions Runner Public IP:"
+          curl -s https://checkip.amazonaws.com
+          echo "Testing TCP connection to ${{ secrets.EC2_HOST }} on port 22..."
+          nc -vzw 5 ${{ secrets.EC2_HOST }} 22
+
       - name: Deploy via SSH (zero-downtime blue/green)
         uses: appleboy/ssh-action@v1.0.3
         with:
