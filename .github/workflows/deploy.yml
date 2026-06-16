@@ -143,19 +143,32 @@ jobs:
     environment: production
 
     steps:
-      - name: Test Network Connectivity to EC2
+      - name: Validate SSH Connectivity and DNS
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          echo "GitHub Actions Runner Public IP:"
-          curl -s https://checkip.amazonaws.com
-          echo "Testing TCP connection to ${{ secrets.EC2_HOST }} on port 22..."
-          nc -vzw 5 ${{ secrets.EC2_HOST }} 22
+          echo "=== Testing DNS Resolution ==="
+          nslookup "$EC2_HOST" || dig "$EC2_HOST" || echo "DNS lookup failed, but proceeding to TCP test."
+          
+          echo "=== Testing TCP Port 22 Connectivity ==="
+          nc -vzw 5 "$EC2_HOST" 22
+          
+          echo "=== Testing SSH Authentication ==="
+          echo "$EC2_SSH_KEY" > private_key.pem
+          chmod 600 private_key.pem
+          # Fail immediately if authentication fails
+          ssh -i private_key.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 "$EC2_USER@$EC2_HOST" 'echo "SSH authentication successful!"'
+          rm -f private_key.pem
 
-      - name: Deploy via SSH (zero-downtime blue/green)
+      - name: Deploy via SSH (True Blue/Green Zero-Downtime)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
           script: |
             set -e
             IMAGE="ghcr.io/${{ github.repository_owner }}/rag-llmops:latest"
@@ -163,11 +176,30 @@ jobs:
             echo "=== Pulling latest image ==="
             docker pull "$IMAGE"
 
-            echo "=== Starting new container (blue) ==="
+            echo "=== Determining active deployment port ==="
+            # Parse current Nginx port or default to 8000
+            CURRENT_PORT=$(grep -oP 'server 127.0.0.1:\K800[0-9]' /etc/nginx/sites-available/rag-llmops || echo "8000")
+            
+            if [ "$CURRENT_PORT" = "8000" ]; then
+              NEW_PORT="8001"
+              NEW_CONTAINER="rag_api_blue"
+              OLD_CONTAINER="rag_api_green"
+            else
+              NEW_PORT="8000"
+              NEW_CONTAINER="rag_api_green"
+              OLD_CONTAINER="rag_api_blue"
+            fi
+            
+            echo "Current active port is $CURRENT_PORT. Deploying new container $NEW_CONTAINER to port $NEW_PORT."
+
+            echo "=== Cleaning up conflicting resources ==="
+            docker rm -f "$NEW_CONTAINER" 2>/dev/null || true
+
+            echo "=== Starting new container ($NEW_CONTAINER) ==="
             docker run -d \
-              --name rag_api_blue \
+              --name "$NEW_CONTAINER" \
               --restart unless-stopped \
-              -p 8001:8000 \
+              -p "$NEW_PORT":8000 \
               -v rag_vectorstore:/app/vectorstore \
               -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
               -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
@@ -182,52 +214,44 @@ jobs:
               "$IMAGE"
 
             echo "=== Health check on new container ==="
-            for i in $(seq 1 10); do
-              if curl -sf http://localhost:8001/health; then
+            HEALTHY=false
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:$NEW_PORT/health; then
+                HEALTHY=true
                 echo "New container is healthy!"
                 break
               fi
-              echo "Waiting ($i/10)…"; sleep 5
+              echo "Waiting ($i/12)..."; sleep 5
             done
 
+            if [ "$HEALTHY" = "false" ]; then
+              echo "❌ Health check failed on $NEW_CONTAINER!"
+              echo "=== Container Logs ==="
+              docker logs "$NEW_CONTAINER" --tail 50
+              echo "=== Rolling back ==="
+              docker rm -f "$NEW_CONTAINER" 2>/dev/null || true
+              exit 1
+            fi
+
             echo "=== Switching Nginx to new container ==="
-            # Update Nginx upstream port then reload (no downtime)
-            sudo sed -i 's/server 127.0.0.1:800[0-9]/server 127.0.0.1:8001/' \
-              /etc/nginx/sites-available/rag-llmops
-            sudo nginx -t && sudo systemctl reload nginx
+            sudo sed -i "s/server 127.0.0.1:$CURRENT_PORT/server 127.0.0.1:$NEW_PORT/" /etc/nginx/sites-available/rag-llmops
 
-            echo "=== Stopping old container ==="
-            docker stop rag_api 2>/dev/null || true
-            docker rm   rag_api 2>/dev/null || true
+            if ! sudo nginx -t; then
+              echo "❌ Nginx configuration is invalid! Rolling back Nginx config!"
+              sudo sed -i "s/server 127.0.0.1:$NEW_PORT/server 127.0.0.1:$CURRENT_PORT/" /etc/nginx/sites-available/rag-llmops
+              docker rm -f "$NEW_CONTAINER" 2>/dev/null || true
+              exit 1
+            fi
 
-            echo "=== Renaming blue → rag_api ==="
-            docker rename rag_api_blue rag_api
-            # Update container port back to 8000 by recreating
-            docker stop rag_api
-            docker run -d \
-              --name rag_api \
-              --restart unless-stopped \
-              -p 8000:8000 \
-              -v rag_vectorstore:/app/vectorstore \
-              -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
-              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
-              -e S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}" \
-              -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
-              -e ADMIN_USERNAME="${{ secrets.ADMIN_USERNAME }}" \
-              -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
-              -e REDIS_URL="redis://localhost:6379" \
-              -e REDIS_ENABLED="true" \
-              -e DATABASE_URL="sqlite+aiosqlite:///./rag_llmops.db" \
-              "$IMAGE"
-            docker rm rag_api_blue 2>/dev/null || true
+            sudo systemctl reload nginx
 
-            # Restore Nginx to port 8000
-            sudo sed -i 's/server 127.0.0.1:8001/server 127.0.0.1:8000/' \
-              /etc/nginx/sites-available/rag-llmops
-            sudo nginx -t && sudo systemctl reload nginx
+            echo "=== Stopping old containers ==="
+            docker rm -f "$OLD_CONTAINER" 2>/dev/null || true
+            # Clean up the old legacy container name if it still exists from prior script versions
+            docker rm -f rag_api 2>/dev/null || true
 
-            echo "=== Deployment complete! ===" && curl -sf http://localhost:8000/health
+            echo "=== Deployment complete! ==="
+            curl -sf http://localhost:$NEW_PORT/health
 
             echo "=== Pruning old images ==="
             docker image prune -f
